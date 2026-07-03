@@ -29,7 +29,20 @@ export function commentsPath(reviewId: string): string {
   return join(reviewDir(reviewId), "comments.toon");
 }
 
-async function atomicWrite(path: string, contents: string): Promise<void> {
+export function reviewPageDir(reviewId: string): string {
+  return join(reviewDir(reviewId), "review");
+}
+
+export function reviewPageAssetsDir(reviewId: string): string {
+  return join(reviewPageDir(reviewId), "assets");
+}
+
+export function reviewPagePath(reviewId: string): string {
+  return join(reviewPageDir(reviewId), "index.html");
+}
+
+/** Write-to-temp-then-rename so a crash mid-write can never leave a truncated file at `path`. */
+export async function atomicWrite(path: string, contents: string): Promise<void> {
   const tmpPath = `${path}.tmp`;
   await writeFile(tmpPath, contents, "utf8");
   await rename(tmpPath, path);

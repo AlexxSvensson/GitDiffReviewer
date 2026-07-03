@@ -90,6 +90,17 @@ export async function listChangedFiles(repoRoot: string, opts: DiffOptions): Pro
 }
 
 /**
+ * Marks a path as a literal pathspec so git never interprets it as a glob.
+ * Without this, a real filename containing pathspec metacharacters (e.g.
+ * `src/handlers/[id].ts`, a common dynamic-route filename) gets treated as a
+ * character-class pattern and can match — and return diffs for — unrelated
+ * files instead of (or in addition to) the intended one.
+ */
+function literalPathspec(path: string): string {
+  return `:(literal)${path}`;
+}
+
+/**
  * `paths` scopes the diff to specific files. For a rename/copy, pass BOTH the
  * old and new path — scoping to only the new path defeats git's rename
  * detection (it needs the old blob in view to pair them up) and the diff
@@ -98,7 +109,7 @@ export async function listChangedFiles(repoRoot: string, opts: DiffOptions): Pro
 export async function getUnifiedDiff(repoRoot: string, opts: DiffOptions, paths?: string[]): Promise<string> {
   const context = opts.contextLines ?? 3;
   const targetArgs = diffTargetArgs(opts);
-  const pathArgs = paths && paths.length > 0 ? ["--", ...paths] : [];
+  const pathArgs = paths && paths.length > 0 ? ["--", ...paths.map(literalPathspec)] : [];
   return git(repoRoot, ["diff", "-M", `-U${context}`, ...targetArgs, ...pathArgs]);
 }
 
@@ -129,7 +140,7 @@ export async function getFullFileContent(
 
 export async function isBinary(repoRoot: string, path: string, opts: DiffOptions): Promise<boolean> {
   const targetArgs = diffTargetArgs(opts);
-  const numstatOut = await git(repoRoot, ["diff", "--numstat", "-M", ...targetArgs, "--", path]);
+  const numstatOut = await git(repoRoot, ["diff", "--numstat", "-M", ...targetArgs, "--", literalPathspec(path)]);
   return parseBinaryPaths(numstatOut).has(path);
 }
 
@@ -151,6 +162,23 @@ export async function getUntrackedFileDiff(repoRoot: string, path: string, conte
     const execError = error as { code?: number; stdout?: string };
     if (execError.code === 1 && typeof execError.stdout === "string") {
       return execError.stdout;
+    }
+    throw error;
+  }
+}
+
+/** `git diff --no-index` has no tracked-file history to consult `--numstat` against, so untracked files need their own binary check. */
+export async function isUntrackedFileBinary(repoRoot: string, path: string): Promise<boolean> {
+  try {
+    const { stdout } = await execFileAsync("git", ["diff", "--no-index", "--numstat", "/dev/null", path], {
+      cwd: repoRoot,
+      maxBuffer: MAX_BUFFER,
+    });
+    return parseBinaryPaths(stdout).has(path);
+  } catch (error) {
+    const execError = error as { code?: number; stdout?: string };
+    if (execError.code === 1 && typeof execError.stdout === "string") {
+      return parseBinaryPaths(execError.stdout).has(path);
     }
     throw error;
   }

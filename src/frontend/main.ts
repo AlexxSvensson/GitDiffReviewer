@@ -1,5 +1,4 @@
 import type { FilePayload, ReviewPayload } from "../review/types.js";
-import { annotateFile } from "./annotate.js";
 import { createContextToggle } from "./context-levels.js";
 import { applyPathFilter } from "./filters.js";
 

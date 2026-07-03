@@ -65,6 +65,16 @@ describe("buildReviewPayload", () => {
     expect(untracked?.hunkDiff).toContain("+brand new");
   });
 
+  it("reports untracked binary files as binary in the assembled payload", async () => {
+    await commitAll(repoRoot, "init empty");
+    await writeFile(join(repoRoot, "new-image.bin"), Buffer.from([0, 1, 2, 0, 255, 254]));
+    await writeFile(join(repoRoot, "new-text.txt"), "hello\n");
+
+    const payload = await buildReviewPayload(repoRoot, "id", "HEAD", { base: "HEAD" });
+    expect(payload.files.find((f) => f.path === "new-image.bin")?.binary).toBe(true);
+    expect(payload.files.find((f) => f.path === "new-text.txt")?.binary).toBe(false);
+  });
+
   it("keeps rename pairing intact in the assembled payload", async () => {
     await writeFile(join(repoRoot, "old.txt"), "same content\n".repeat(5));
     await commitAll(repoRoot, "init");

@@ -10,6 +10,15 @@
  * internal class names for those two row kinds.
  */
 export function annotateFile(containerEl: HTMLElement, filePath: string): void {
+  // diff2html always wraps rendered output in .d2h-file-wrapper, even for a
+  // binary-file placeholder with no .d2h-file-side-diff children (a
+  // legitimate, silent no-op case below). Its absence means diff2html's DOM
+  // shape no longer matches what this module was built against.
+  if (!containerEl.querySelector(".d2h-file-wrapper")) {
+    console.warn(`diff-review: expected diff2html output for "${filePath}" but found none — annotation skipped`);
+    return;
+  }
+
   const sides = containerEl.querySelectorAll<HTMLElement>(".d2h-file-side-diff");
   sides.forEach((sideEl, index) => {
     const side: "old" | "new" = index === 0 ? "old" : "new";
