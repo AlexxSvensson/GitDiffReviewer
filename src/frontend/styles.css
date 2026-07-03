@@ -51,6 +51,15 @@ body {
   font-size: 0.9rem;
 }
 
+.review-verdict-filter {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  background: #fff;
+  cursor: pointer;
+}
+
 .review-file-list {
   padding: 1rem;
   display: flex;
@@ -83,6 +92,32 @@ body {
   border: 1px solid #d0d7de;
   border-radius: 0 0 6px 6px;
   overflow-x: auto;
+}
+
+.verdict-buttons {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.verdict-button {
+  opacity: 0.6;
+}
+
+.verdict-button.active {
+  opacity: 1;
+  font-weight: 600;
+}
+
+.verdict-button.verdict-good.active {
+  background: #dafbe1 !important;
+  border-color: #1f883d !important;
+  color: #1a7f37;
+}
+
+.verdict-button.verdict-bad.active {
+  background: #ffebe9 !important;
+  border-color: #cf222e !important;
+  color: #cf222e;
 }
 
 .comment-form {
