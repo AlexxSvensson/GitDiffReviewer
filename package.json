@@ -15,17 +15,19 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.frontend.json --noEmit && node esbuild.frontend.mjs",
     "test": "vitest run",
     "skill:generate": "node scripts/generate-skill.mjs",
     "skill:check": "node scripts/generate-skill.mjs --check"
   },
   "dependencies": {
+    "@toon-format/toon": "^2.1.0",
     "axi-sdk-js": "^0.1.8",
-    "@toon-format/toon": "^2.1.0"
+    "diff2html": "^3.4.56"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "esbuild": "^0.28.1",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   }

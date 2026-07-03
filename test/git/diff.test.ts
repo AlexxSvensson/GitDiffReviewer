@@ -8,6 +8,7 @@ import {
   getFullFileContent,
   getUntrackedFileDiff,
   getUnifiedDiff,
+  isBinary,
   listChangedFiles,
   listUntrackedFiles,
 } from "../../src/git/diff.js";
@@ -84,6 +85,22 @@ describe("git diff layer", () => {
     ]);
   });
 
+  it("preserves rename detection only when scoped to both old and new paths", async () => {
+    await writeFile(join(repoRoot, "old.txt"), "line one\nline two\nline three\nline four\nline five\n");
+    await commitAll(repoRoot, "init");
+    await execFileAsync("git", ["mv", "old.txt", "renamed.txt"], { cwd: repoRoot });
+
+    const scopedToNewOnly = await getUnifiedDiff(repoRoot, { base: "HEAD", staged: true }, ["renamed.txt"]);
+    expect(scopedToNewOnly).not.toContain("rename from");
+
+    const scopedToBoth = await getUnifiedDiff(repoRoot, { base: "HEAD", staged: true }, [
+      "old.txt",
+      "renamed.txt",
+    ]);
+    expect(scopedToBoth).toContain("rename from old.txt");
+    expect(scopedToBoth).toContain("rename to renamed.txt");
+  });
+
   it("detects a binary file", async () => {
     await writeFile(join(repoRoot, "img.bin"), Buffer.from([0, 1, 2, 0, 255, 254]));
     await commitAll(repoRoot, "init");
@@ -91,6 +108,7 @@ describe("git diff layer", () => {
 
     const files = await listChangedFiles(repoRoot, { base: "HEAD" });
     expect(files).toEqual([{ status: "modified", path: "img.bin", binary: true }]);
+    expect(await isBinary(repoRoot, "img.bin", { base: "HEAD" })).toBe(true);
   });
 
   it("reads full file content on both sides", async () => {

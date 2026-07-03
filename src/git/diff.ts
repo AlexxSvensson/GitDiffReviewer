@@ -89,10 +89,17 @@ export async function listChangedFiles(repoRoot: string, opts: DiffOptions): Pro
   return files;
 }
 
-export async function getUnifiedDiff(repoRoot: string, opts: DiffOptions): Promise<string> {
+/**
+ * `paths` scopes the diff to specific files. For a rename/copy, pass BOTH the
+ * old and new path — scoping to only the new path defeats git's rename
+ * detection (it needs the old blob in view to pair them up) and the diff
+ * degrades into a plain "new file" add.
+ */
+export async function getUnifiedDiff(repoRoot: string, opts: DiffOptions, paths?: string[]): Promise<string> {
   const context = opts.contextLines ?? 3;
   const targetArgs = diffTargetArgs(opts);
-  return git(repoRoot, ["diff", "-M", `-U${context}`, ...targetArgs]);
+  const pathArgs = paths && paths.length > 0 ? ["--", ...paths] : [];
+  return git(repoRoot, ["diff", "-M", `-U${context}`, ...targetArgs, ...pathArgs]);
 }
 
 /**

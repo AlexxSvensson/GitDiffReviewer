@@ -14,5 +14,5 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true
   },
-  "include": ["src/cli/**/*", "src/git/**/*", "src/review/**/*", "src/toon/**/*"]
+  "include": ["src/cli/**/*", "src/git/**/*", "src/review/**/*", "src/toon/**/*", "src/server/**/*"]
 }
