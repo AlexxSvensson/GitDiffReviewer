@@ -8,6 +8,8 @@ import {
   getFullFileContent,
   getUntrackedFileDiff,
   getUnifiedDiff,
+  isBinary,
+  isUntrackedFileBinary,
   listChangedFiles,
   listUntrackedFiles,
 } from "../../src/git/diff.js";
@@ -84,6 +86,22 @@ describe("git diff layer", () => {
     ]);
   });
 
+  it("preserves rename detection only when scoped to both old and new paths", async () => {
+    await writeFile(join(repoRoot, "old.txt"), "line one\nline two\nline three\nline four\nline five\n");
+    await commitAll(repoRoot, "init");
+    await execFileAsync("git", ["mv", "old.txt", "renamed.txt"], { cwd: repoRoot });
+
+    const scopedToNewOnly = await getUnifiedDiff(repoRoot, { base: "HEAD", staged: true }, ["renamed.txt"]);
+    expect(scopedToNewOnly).not.toContain("rename from");
+
+    const scopedToBoth = await getUnifiedDiff(repoRoot, { base: "HEAD", staged: true }, [
+      "old.txt",
+      "renamed.txt",
+    ]);
+    expect(scopedToBoth).toContain("rename from old.txt");
+    expect(scopedToBoth).toContain("rename to renamed.txt");
+  });
+
   it("detects a binary file", async () => {
     await writeFile(join(repoRoot, "img.bin"), Buffer.from([0, 1, 2, 0, 255, 254]));
     await commitAll(repoRoot, "init");
@@ -91,6 +109,34 @@ describe("git diff layer", () => {
 
     const files = await listChangedFiles(repoRoot, { base: "HEAD" });
     expect(files).toEqual([{ status: "modified", path: "img.bin", binary: true }]);
+    expect(await isBinary(repoRoot, "img.bin", { base: "HEAD" })).toBe(true);
+  });
+
+  it("scopes a path-restricted diff literally instead of as a glob pathspec", async () => {
+    // "[id].ts" is a valid dynamic-route filename but also a valid git glob
+    // character class — without literal-pathspec protection this scope would
+    // also match unrelated single-character files like "i.ts" or "d.ts".
+    await writeFile(join(repoRoot, "[id].ts"), "version 1\n");
+    await writeFile(join(repoRoot, "i.ts"), "i v1\n");
+    await writeFile(join(repoRoot, "d.ts"), "d v1\n");
+    await commitAll(repoRoot, "init");
+    await writeFile(join(repoRoot, "[id].ts"), "version 2\n");
+    await writeFile(join(repoRoot, "i.ts"), "i v2\n");
+    await writeFile(join(repoRoot, "d.ts"), "d v2\n");
+
+    const scoped = await getUnifiedDiff(repoRoot, { base: "HEAD" }, ["[id].ts"]);
+    expect(scoped).toContain("[id].ts");
+    expect(scoped).not.toContain("i.ts");
+    expect(scoped).not.toContain("d.ts");
+  });
+
+  it("reports untracked binary files as binary", async () => {
+    await commitAll(repoRoot, "init empty");
+    await writeFile(join(repoRoot, "new-image.bin"), Buffer.from([0, 1, 2, 0, 255, 254]));
+    await writeFile(join(repoRoot, "new-text.txt"), "hello\n");
+
+    expect(await isUntrackedFileBinary(repoRoot, "new-image.bin")).toBe(true);
+    expect(await isUntrackedFileBinary(repoRoot, "new-text.txt")).toBe(false);
   });
 
   it("reads full file content on both sides", async () => {
