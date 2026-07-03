@@ -24,7 +24,8 @@
   "dependencies": {
     "@toon-format/toon": "^2.1.0",
     "axi-sdk-js": "^0.1.8",
-    "diff2html": "^3.4.56"
+    "diff2html": "^3.4.56",
+    "preact": "^10.29.4"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
