@@ -1,39 +1,87 @@
-import { copyFile, mkdir } from "node:fs/promises";
+import { spawn } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AxiError, type AxiCliCommand } from "axi-sdk-js";
+import { listChangedFiles, listUntrackedFiles } from "../git/diff.js";
 import { resolveRepoRoot } from "../git/repo.js";
-import { buildReviewPayload } from "../review/build-payload.js";
 import { computeReviewId } from "../review/hash.js";
-import { atomicWrite, reviewPageAssetsDir, reviewPagePath } from "../review/store.js";
-import { renderReviewPage } from "../server/page-template.js";
 import type { CliContext } from "./context.js";
 import { parseTargetArgs } from "./target-args.js";
 
-// dist/cli/target-command.js -> dist/frontend/{bundle.js,bundle.css}
-const FRONTEND_DIST_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "frontend");
+const SERVER_ENTRY = join(dirname(fileURLToPath(import.meta.url)), "server-entry.js");
+const HANDSHAKE_TIMEOUT_MS = 5000;
 
-async function copyFrontendAssets(assetsDir: string): Promise<void> {
-  await mkdir(assetsDir, { recursive: true });
+/**
+ * Spawns the review server as a detached child and resolves once it prints
+ * its "LISTENING <url>" handshake line. Destroys the piped stdio afterward so
+ * this process holds no open handle to the child — the child (detached +
+ * unref'd) keeps running as the server on its own, and this process is free
+ * to exit immediately (README: "agenten hänger inte kvar").
+ */
+function spawnDetachedServer(args: string[]): Promise<string> {
+  return new Promise((resolvePromise, reject) => {
+    const child = spawn(process.execPath, [SERVER_ENTRY, ...args], {
+      detached: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stdoutBuf = "";
+    let stderrBuf = "";
+    let settled = false;
+
+    const timeout = setTimeout(() => {
+      finish(() => {
+        child.kill();
+        reject(new Error("Timed out waiting for the review server to start"));
+      });
+    }, HANDSHAKE_TIMEOUT_MS);
+
+    function finish(action: () => void): void {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      child.stdout?.destroy();
+      child.stderr?.destroy();
+      child.unref();
+      action();
+    }
+
+    child.stdout?.on("data", (chunk: Buffer) => {
+      stdoutBuf += chunk.toString();
+      const match = stdoutBuf.match(/^LISTENING (\S+)/m);
+      if (match) finish(() => resolvePromise(match[1]));
+    });
+    child.stderr?.on("data", (chunk: Buffer) => {
+      stderrBuf += chunk.toString();
+    });
+    child.once("error", (error) => finish(() => reject(error)));
+    child.once("exit", (code) => {
+      finish(() => reject(new Error(`Review server exited early (code ${code}): ${stderrBuf.trim()}`)));
+    });
+  });
+}
+
+/** Best-effort: a missing/unavailable opener shouldn't fail the command — the printed URL is still usable. */
+function openBrowser(url: string): void {
+  const platform = process.platform;
+  const [command, args] =
+    platform === "darwin"
+      ? ["open", [url]]
+      : platform === "win32"
+        ? ["cmd", ["/c", "start", "", url]]
+        : ["xdg-open", [url]];
   try {
-    await Promise.all([
-      copyFile(join(FRONTEND_DIST_DIR, "bundle.js"), join(assetsDir, "bundle.js")),
-      copyFile(join(FRONTEND_DIST_DIR, "bundle.css"), join(assetsDir, "bundle.css")),
-    ]);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new AxiError(`Frontend assets not found (${message})`, "FRONTEND_NOT_BUILT", [
-      "Run `npm run build` first — it builds the frontend bundle this command copies in",
-    ]);
+    spawn(command, args, { detached: true, stdio: "ignore" }).unref();
+  } catch {
+    // No opener available — the caller still gets the URL in the CLI output.
   }
 }
 
 /**
- * `diff-review <target>` — M2: renders the real side-by-side diff view to a
- * static HTML file under ~/.diff-review/<id>/review/ for manual viewing. The
- * live save server + automatic browser-open land in a later milestone (M3);
- * --staged/--base/--no-open/--port are already parsed but --no-open and
- * --port have no effect yet since there is no server to suppress/configure.
+ * `diff-review <target>` — M3: spawns a detached, short-lived review server
+ * and (unless --no-open) opens it in a browser, then returns immediately.
+ * The human reviews and clicks "Review done" whenever they get to it; that
+ * POSTs to /save, which writes comments.toon and the server exits on its own.
  */
 export const targetCommand: AxiCliCommand<CliContext> = async (args, context) => {
   const cwd = context?.cwd ?? process.cwd();
@@ -41,25 +89,40 @@ export const targetCommand: AxiCliCommand<CliContext> = async (args, context) =>
   const repoRoot = await resolveRepoRoot(resolve(cwd, parsed.target));
   const reviewId = computeReviewId(repoRoot, parsed.baseKey);
 
-  const [payload] = await Promise.all([
-    buildReviewPayload(repoRoot, reviewId, parsed.baseKey, { base: parsed.base, staged: parsed.staged }),
-    copyFrontendAssets(reviewPageAssetsDir(reviewId)),
+  const diffOpts = { base: parsed.base, staged: parsed.staged };
+  const [changedFiles, untrackedFiles] = await Promise.all([
+    listChangedFiles(repoRoot, diffOpts),
+    listUntrackedFiles(repoRoot),
   ]);
 
-  const html = renderReviewPage(payload, { js: "./assets/bundle.js", css: "./assets/bundle.css" });
-  const indexPath = reviewPagePath(reviewId);
-  await atomicWrite(indexPath, html);
+  const serverArgs = [repoRoot, parsed.base, parsed.staged ? "1" : "0", reviewId];
+  if (parsed.port !== undefined) serverArgs.push(String(parsed.port));
+
+  let url: string;
+  try {
+    url = await spawnDetachedServer(serverArgs);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new AxiError(`Failed to start the review server: ${message}`, "SERVER_START_FAILED", [
+      "Run `npm run build` first if dist/frontend/bundle.js is missing",
+    ]);
+  }
+
+  if (!parsed.noOpen) {
+    openBrowser(url);
+  }
 
   return {
     repoRoot,
     baseRef: parsed.baseKey,
     reviewId,
-    changedFiles: payload.files.map((file) => ({
-      status: file.status,
-      path: file.path,
-      binary: file.binary,
-    })),
-    reviewPage: indexPath,
-    note: "Open reviewPage in a browser to view the diff. Auto-open + the save server land in a later milestone.",
+    url,
+    changedFiles: [
+      ...changedFiles.map((file) => ({ status: file.status, path: file.path, binary: file.binary })),
+      ...untrackedFiles.map((path) => ({ status: "untracked" as const, path, binary: false })),
+    ],
+    note: parsed.noOpen
+      ? "Server running — open the URL above in a browser to review."
+      : "Server running — a browser should open automatically. If not, open the URL above.",
   };
 };

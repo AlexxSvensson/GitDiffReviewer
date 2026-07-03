@@ -2,15 +2,7 @@ import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import {
-  atomicWrite,
-  readCommentsRaw,
-  readMeta,
-  reviewPageAssetsDir,
-  reviewPagePath,
-  writeCommentsRaw,
-  writeMeta,
-} from "../../src/review/store.js";
+import { atomicWrite, readCommentsRaw, readMeta, reviewDir, writeCommentsRaw, writeMeta } from "../../src/review/store.js";
 
 describe("review store", () => {
   let home: string;
@@ -53,14 +45,9 @@ describe("review store", () => {
     expect(await readCommentsRaw("abc123")).toBe(toonText);
   });
 
-  it("derives review page/assets paths under the same review directory", () => {
-    expect(reviewPagePath("abc123")).toBe(join(home, "abc123", "review", "index.html"));
-    expect(reviewPageAssetsDir("abc123")).toBe(join(home, "abc123", "review", "assets"));
-  });
-
   it("atomicWrite leaves no .tmp file behind and writes the final content", async () => {
-    const path = reviewPagePath("abc123");
-    await mkdir(join(home, "abc123", "review"), { recursive: true });
+    const path = join(reviewDir("abc123"), "index.html");
+    await mkdir(reviewDir("abc123"), { recursive: true });
     await atomicWrite(path, "<html></html>");
     expect(await readFile(path, "utf8")).toBe("<html></html>");
     await expect(readFile(`${path}.tmp`, "utf8")).rejects.toThrow();
