@@ -1,236 +1,181 @@
-# diff-review-axi — projektsammanfattning & spec
+# diff-review
 
-Ett verktyg för att granska ocommittade git-ändringar i ett webbfönster, skriva
-kommentarer på olika nivåer, och lämna tillbaka dem strukturerat till en
-AI-agent (Claude Code). Byggs som en **AXI** (Agent eXperience Interface).
+Review your uncommitted git changes in a browser, leave scoped comments, and
+hand structured feedback back to an AI coding agent (Claude Code) — without
+ever running `git diff` by hand.
 
----
+![Screenshot of diff-review's browser UI showing a side-by-side diff, verdict buttons, and a comment counter](docs/assets/screenshot.png)
 
-## 1. Bakgrund & varför
+## Why
 
-Nuvarande arbetsflöde: när Claude Code gjort ändringar behöver man commita och
-kolla i git (eller läsa långa svar/skärmdumpar) för att se vad som ändrats.
-Önskemålet är att slippa det — se alla diffar direkt i en bra vy, kommentera, och
-skicka tillbaka kommentarerna till agenten.
+When an agent makes a batch of edits, the usual way to check the result is to
+commit and look at git, or scroll through a long chat reply. `diff-review`
+skips that: it opens a real side-by-side diff view in your browser, lets you
+comment on exactly the lines/files/overall change you care about, and hands
+those comments back to the agent as structured data it can act on.
 
-Idén är inspirerad av **lavish-axi** (`github.com/kunchenguid/lavish-axi`), som gör
-exakt detta mönster fast för HTML-artefakter: en CLI öppnar ett lokalt
-webbfönster, människan annoterar, agenten hämtar feedback. Vårt verktyg gör samma
-grundidé fast riktat mot **git-diffar** istället för HTML.
+## How it works
 
-## 2. Vad AXI är (kort)
+1. The agent runs `diff-review <target>`. This starts a short-lived local
+   server on `127.0.0.1` and opens your browser — the agent does **not**
+   wait around for you to finish.
+2. You review on your own time: expand context, filter files, mark files
+   👍/👎, leave comments on a line, a file, or the review as a whole.
+3. Click **Review done**. The server writes your comments to disk and shuts
+   itself down.
+4. Next time the agent runs `diff-review comments <target>`, it reads your
+   comments back as [TOON](https://github.com/toon-format/spec) (a compact,
+   token-efficient alternative to JSON).
 
-AXI = Agent eXperience Interface. En designfilosofi för CLI-verktyg som är
-byggda för att drivas av AI-agenter snarare än människor. Kärnprinciper som är
-relevanta här:
+There's no long-lived server, no polling, no login — just a local review
+loop that gets out of the way when it's not needed.
 
-- **TOON-output** på stdout (Token-Oriented Object Notation) istället för JSON —
-  ~40 % färre tokens. Fältnamn deklareras en gång i ett huvud, sedan bara värden
-  per rad. Format: `namn[N]{fält}:` följt av indenterade värderader.
-- **Strukturerade fel** till stdout (inte stderr), med actionable förslag.
-- **Exit-koder**: 0 = success, 1 = error, 2 = usage error.
-- **Inga interaktiva prompts** — allt via flaggor.
-- **Kontextuell disclosure** — föreslå nästa-steg-kommandon efter output.
-- **Home-vy** utan argument: visar verktygets sökväg (med `~`), en rads
-  beskrivning, och ev. aktivt state.
+## Install
 
-## 3. Vald arkitektur (Väg 2, förenklad)
+Not published to npm yet, so `npx` won't work. Clone and link it locally:
 
-Under diskussionen övervägdes tre vägar:
+```bash
+git clone https://github.com/AlexxSvensson/GitDiffReviewer.git
+cd GitDiffReviewer
+npm install
+npm run build
+npm link
+```
 
-- **Väg 1** — bygg ovanpå lavish-axi (rendera diff som HTML, öppna med
-  `lavish-axi`). Minst jobb, ärver allt "svårt" (server, poll, annoteringar), men
-  lavishs annoteringsmodell pekar på DOM-element, inte `fil:rad`, vilket skaver
-  för diff-review.
-- **Väg 2** — bygg en egen fristående AXI. Mer kod, full kontroll över
-  datamodellen.
-- **Mellanväg** — prototypa Väg 1 först, bygg Väg 2 om annoteringsmodellen skaver.
+This puts a `diff-review` binary on your PATH.
 
-**Beslut: Väg 2**, men med ett **medvetet lättat krav** — agenten behöver INTE
-blocka och vänta på review (ingen long-poll). Det tar bort den svåraste delen.
+## Quick start
 
-Flödet blir asynkront via filsystemet:
+```bash
+# Open a review of everything uncommitted in the current repo
+diff-review .
 
-1. Agenten kör `diff-review <mål>` → startar en kortlivad lokal server på
-   `127.0.0.1`, öppnar browsern, visar diffarna. Agenten hänger inte kvar.
-2. Människan granskar när den vill, skriver kommentarer, trycker "review klar".
-3. "Review klar" gör `POST /save` → servern skriver kommentarerna till disk
-   (t.ex. `~/.diff-review/<hash>/comments.toon`) och stänger sig.
-4. Nästa gång agenten körs läser den `diff-review comments <mål>` → läser filen →
-   renderar som TOON.
+# ...review in the browser, click "Review done"...
 
-Ingen long-lived server, ingen session-liveness, ingen feedback-kö. Servern gör
-bara "ta emot ett POST och dö".
+# Read the comments back
+diff-review comments .
+```
 
-> Alternativ utan server alls: en "Exportera"-knapp i HTML:en laddar ner en
-> `.toon`/`.json`-fil via blob (`URL.createObjectURL`). Enklare men kräver ett
-> manuellt nedladdnings-steg. Den lilla servern ger bättre UX för ~20 rader
-> Express-kod, så den föredras.
-
-## 4. Funktionskrav (låsta)
-
-### Diff-vy
-- **Side-by-side som i VS Code**: gammal kod till vänster, ny kod till höger.
-- Utgår från **ocommittade git-ändringar** — `git diff HEAD` (working tree +
-  ev. staged mot senaste commit). Se not nedan om exakta varianter.
-- **Radnummer ska visas** (båda sidor).
-
-### Vyval — hur mycket kontext som visas per diff
-Man ska kunna välja vilken diff man tittar på och hur mycket omgivande kod som
-visas runt en ändring, så man får en uppfattning om koden runtomkring. Nivåer:
-
-1. **Bara hunkarna** (default) — det git ger, med några rader kontext.
-2. **Mer kontext** — utöka antalet oförändrade rader som visas runt varje hunk
-   (t.ex. via `git diff -U<n>` med större `n`, eller expandera stegvis i UI:t
-   med "visa fler rader"-knappar mellan/omkring hunkarna).
-3. **Hela filen** — visa hela filinnehållet med ändringarna markerade.
-
-Alla tre är enkla att bygga — det handlar bara om hur många oförändrade rader
-som renderas, inte om att förstå kodens struktur.
-
-### Filtrering (rent frontend, ingen backend)
-- Filtrera vad man vill *se*: t.ex. bara vissa filer, path-sökning, dölj
-  oförändrat. (Exakt uppsättning ej låst — designas i frontend.)
-
-### Kommentarer — tre scopes
-Mappar direkt till datamodellen (exempelfiler nedan är illustrativa):
-
-| scope    | har file | har line | betydelse                                  |
-|----------|----------|----------|--------------------------------------------|
-| `change` | ja       | ja       | kommentar på en specifik rad/ändring        |
-| `file`   | ja       | nej      | kommentar på en hel fil                      |
-| `global` | nej      | nej      | kommentar på hela review:n (alla diffar)     |
-
-## 5. Datamodell (TOON)
-
-Kommentarer som lämnas tillbaka till agenten:
+Example output:
 
 ```
 comments[3]{scope,file,line,body}:
-  change,src/models.py,42,"Saknar index på FK"
-  file,src/views.py,,"Hela filen behöver en refaktor"
-  global,,,"Migrationen ser bra ut, en fråga om timezone-hanteringen"
+  change,src/server.ts,42,"This retry loop has no backoff — could hammer the upstream"
+  file,src/utils.ts,,"console.log left in from debugging"
+  global,,,"Looks good overall, just the two notes above"
 ```
 
-- `scope` ∈ `change` | `file` | `global`
-- `change` → fil + rad ifyllda
-- `file` → bara fil
-- `global` → varken fil eller rad
-- Renderas av SDK:ts `renderOutput()` — man håller dicts/objekt i koden och
-  kodar till TOON vid utskrift.
+## Comment scopes
 
-## 6. Byggstenar & beroenden
+Comments map to exactly one of three scopes, matching how most PR review
+tools already work:
 
-### axi-sdk-js (`^0.1.8`) — ger gratis:
-Inspekterat innehåll (moduler: `cli`, `errors`, `hooks`, `output`, `update`):
+| scope    | has file | has line | meaning                                 |
+|----------|----------|----------|------------------------------------------|
+| `change` | yes      | yes      | a comment on one specific line           |
+| `file`   | yes      | no       | a comment on an entire file               |
+| `global` | no       | no       | a comment on the review as a whole        |
 
-- `runAxiCli(options)` — kommando-router. Man ger `commands`-map, `home`-handler,
-  `topLevelHelp`; den sköter argv, okända kommandon, hjälp, exit-koder.
-- `output`-modulen — `renderOutput()`, `errorOutput()`, `homeHeaderOutput()`,
-  `collapseHomeDirectory()`, `renderHomeHeader()`. TOON-formatering + home-vy.
-- `errors`-modulen — `AxiError(message, code, suggestions)` +
-  `exitCodeForError()`. Strukturerade fel med rätt exit-koder.
-- `hooks`-modulen — `installSessionStartHooks()` skriver SessionStart-hooks till
-  Claude Code / Codex / OpenCode, idempotent, path-repair. (= `setup hooks`.)
-- `update`-modulen — hela self-update-flödet (`runUpdate`, `fetchLatestVersion`,
-  `detectInstallMethod`, `planUpgrade`).
-- Enda dependency: `@toon-format/toon` (`^2.1.0`).
+**Click any diff row** to leave a `change` comment. **"Comment on file"** on
+a file's toolbar leaves a `file` comment. **"Comment on entire review"** in
+the page toolbar leaves a `global` comment.
 
-### VIKTIGT — vad SDK:t INTE ger:
-**Ingen server, ingen long-poll, ingen session-modell, inget browser-SDK, ingen
-feedback-kö.** Allt sådant byggde lavish själv ovanpå SDK:t. För oss spelar det
-mindre roll eftersom vi medvetet skippat poll/väntan — men save-servern (POST →
-skriv fil → stäng) och hela frontend skriver vi själva.
+### 👍/👎 verdict shortcuts
 
-### diff2html
-Moget JS-bibliotek som renderar unified diff till snygg vy. Stödjer
-**side-by-side** och inline. Detta löser merparten av diff-renderingen. Man matar
-in `git diff`-output (unified format) och får HTML.
-- Repo: `github.com/rtfpessoa/diff2html`
-- Kolla att side-by-side + radnummer + "expandera context"/visa hela filen
-  stöds i den version som väljs; annars komplettera med egen logik för att hämta
-  hela filinnehållet och visa oförändrade rader.
+Each file also has one-click **Looks good** / **Looks bad** buttons — click
+again to clear, click the other to switch. A verdict is just a fast way to
+leave a `file`-scope comment ("Looks good"/"Looks bad") without typing; it
+round-trips through the same `comments.toon` as everything else, so the
+agent sees it like any other comment.
 
-### TOON
-- Spec: `github.com/toon-format/spec` (working draft, var v3.2 vid diskussion).
-- SDK:t drar in `@toon-format/toon`. **Lås versionen** — specen är ung och
-  implementationer kan vara inkompatibla mellan spec-versioner.
+## Diff view features
 
-## 7. Kommando-yta (förslag)
+- **Side-by-side rendering** (old on the left, new on the right), including
+  added/deleted/renamed/binary files.
+- **Two context levels** per file: the default hunk view, or "Show full
+  file" to see the whole file with changes highlighted.
+- **Filter by path** (substring match) and by **verdict** (all / good / bad /
+  no verdict yet) — both apply together.
 
-| Kommando                         | Beskrivning                                         |
-|----------------------------------|-----------------------------------------------------|
-| `diff-review`                    | Home-vy: sökväg, beskrivning, ev. senaste review.   |
-| `diff-review <mål>`              | Rendera ocommittade diffar → öppna browser + server.|
-| `diff-review comments <mål>`     | Läs tillbaka sparade kommentarer som TOON.          |
-| `diff-review setup hooks`        | Installera SessionStart-hooks (via SDK).            |
-| `diff-review update`             | Self-update (via SDK, inbyggt).                     |
+## Commands
 
-Flaggor att överväga: `--staged` / `--base <ref>` för vad diffen jämförs mot,
-`--no-open` (skapa utan att öppna browser), `--port`.
+| Command                         | Description                                          |
+|----------------------------------|-------------------------------------------------------|
+| `diff-review`                    | Home view: path, description, available commands.     |
+| `diff-review <target>`           | Open a review for `<target>` (a path; defaults to `.`).|
+| `diff-review comments <target>`  | Read back saved comments for `<target>` as TOON.       |
+| `diff-review setup hooks`        | Install a SessionStart hook (Claude Code, Codex, OpenCode). |
+| `diff-review update`             | Self-update — errors until this is published to npm.   |
 
-## 7b. Distribution som Agent Skill
+`<target>` only identifies *which repo* to review (it resolves to the
+enclosing git root) — the review always covers the whole repo's uncommitted
+changes, not just that subdirectory.
 
-Primärt leveranssätt. En AXI är bara en CLI, och skill:en lär agenten att köra
-den (t.ex. via `npx -y <paket>`), så CLI:n följer med on demand utan npm-install.
+### Flags (after `<target>`)
 
-- **SKILL.md** med frontmatter (namn, beskrivning, `use_when`-triggers) som lär
-  agenten arbetsflödet: kör `<verktyg> <mål>` för att öppna review, kör
-  `<verktyg> comments <mål>` för att läsa tillbaka kommentarer.
-- Skill:en ska genereras från samma källa som home-vyn (single source of truth),
-  så guidningen inte driver isär från CLI:ns egen output. Lägg ett
-  `--check`-bygg­steg i CI som failar om den committade SKILL.md är stale.
-- Skill:en är statisk — utelämna dynamiskt state (öppna sessioner etc.).
-- Installeras i projektets skills-katalog som default (`.claude/skills/`), eller
-  globalt (`~/.claude/skills/`) med `-g`.
-- Valfri SessionStart-hook (via SDK:ts `installSessionStartHooks()`) för ambient
-  kontext i varje session; hook + skill är komplementära.
+| Flag             | Effect                                                              |
+|------------------|-----------------------------------------------------------------------|
+| `--staged`       | Diff staged changes against `HEAD` instead of working tree vs. base.  |
+| `--base <ref>`   | Diff against `<ref>` instead of `HEAD`.                                |
+| `--no-open`      | Start the server but don't open a browser automatically.              |
+| `--port <n>`     | Use a specific port instead of an OS-assigned one.                     |
 
-## 8. Att reda ut innan/under kodning
+## Using it as a Claude Code skill
 
-- **Exakt git-diff-källa**: `git diff` (working tree vs index), `git diff HEAD`
-  (allt ocommittat vs senaste commit), eller `git diff --staged`? Kravet säger
-  "ocommittade" → troligen `git diff HEAD`, men bekräfta om staged ska ingå.
-  Överväg en flagga för att välja bas.
-- **Nivå 3 — "visa hela filen"**: diff2html visar bara hunkar; att expandera till
-  hela filen kräver att man läser filinnehållet (nya sidan från working tree,
-  gamla från `git show HEAD:<path>`) och fyller i oförändrade rader med radnummer.
-  Enkelt.
-- **Nivå 2 — "mer kontext"**: två sätt, båda enkla. Antingen kör `git diff` med
-  större `-U<n>` (fler kontextrader per hunk) och rendera om, eller — smidigast i
-  UI:t — lägg "visa fler rader"-knappar i gapen mellan/omkring hunkarna som
-  hämtar de saknade oförändrade raderna från filinnehållet (samma källor som
-  nivå 3). Ingen förståelse av kodstruktur behövs; det är bara fler rader.
-- **Radnummer-mappning för `change`-kommentarer**: lägg `data-file` och
-  `data-line` (och ev. `data-side` för gammal/ny) på varje rad-element i DOM:en,
-  så en klickad rad kan översättas till `fil:rad` för kommentaren.
-- **Binära filer / renames / borttagna filer**: hantera i diff-parsningen.
-- **Stora diffar**: prestanda i renderingen; ev. lazy-render per fil.
+A generated `SKILL.md` lives at `.claude/skills/diff-review/`. Any Claude
+Code session opened inside this repo picks it up automatically. To make it
+available in *every* project, copy it to your global skills directory:
 
-## 9. Säkerhet (viktigt — intern/kundnära kod)
+```bash
+# macOS/Linux
+cp -r .claude/skills/diff-review ~/.claude/skills/diff-review
 
-- **Bind bara till loopback** (`127.0.0.1`). En wildcard-bind (`0.0.0.0`)
-  exponerar en oautentiserad server som kan läsa/servera lokala filer — olämpligt
-  för intern eller känslig kod. (Samma varning gäller lavish.)
-- **Ingen extern delning** av diffar (motsvarande `lavish-axi share` → tredjepart
-  ht-ml.app är uteslutet för intern kod).
-- Servern ska vara kortlivad och stänga sig efter save / idle.
+# Windows (PowerShell)
+Copy-Item -Recurse -Force .\.claude\skills\diff-review "$env:USERPROFILE\.claude\skills\diff-review"
+```
 
-## 10. Stack-kontext
+The skill is generated from the same source as the CLI's home view
+(`npm run skill:generate`), so its instructions can't drift from what the CLI
+actually does. `npm run skill:check` (also run in CI) fails the build if the
+committed `SKILL.md` is stale.
 
-- Node för AXI:n (SDK:t är Node/TS).
-- Diffar hämtas från git i det repo där verktyget körs.
-- Distribueras som **Agent Skill** (Agent Skills-format), plus valfri global
-  npm-install för SessionStart-hooks — likt övriga AXI:er (t.ex. lavish).
+## Security
 
-## 11. Nästa steg när kodning påbörjas
+- The review server **only ever binds to `127.0.0.1`** — this is a hardcoded
+  literal in the code, never sourced from config or a flag, so there's no
+  path to accidentally exposing it on the network.
+- It serves nothing beyond the review page, its JS/CSS bundle, and
+  `POST /save` — and shuts itself down after a successful save or a
+  15-minute idle timeout.
+- Diffs are never sent anywhere external — everything stays on your machine.
 
-1. Skelett: `runAxiCli()` med `home` + `<mål>` + `comments` + `setup hooks`.
-2. Git-lagret: hämta unified diff + (för hela-filen) fullt innehåll gammal/ny.
-3. Frontend: diff2html side-by-side, radnummer, `data-file`/`data-line`,
-   filtrering. Vyval i tre nivåer: hunk (default) / mer kontext (större `-U<n>`
-   eller "visa fler rader"-knappar) / hela filen.
-4. Kommentars-UI: tre scopes (change / file / global).
-5. Save-server: `POST /save` → skriv `comments.toon` → stäng.
-6. `comments`-kommandot: läs fil → `renderOutput()` som TOON.
-7. Säkerhet: loopback-bind, kortlivad server.
+## Development
+
+```bash
+npm install
+npm run build   # tsc (CLI/server) + tsc --noEmit (frontend typecheck) + esbuild (frontend bundle)
+npm test        # vitest — git layer, TOON round-trip, review server, frontend state logic
+```
+
+Project layout:
+
+```
+src/
+  cli/        CLI commands (runAxiCli wiring, target/comments/setup-hooks)
+  git/        Shells out to git: diff, file content, binary detection
+  review/     Review-id hashing, on-disk store, payload assembly
+  server/     The loopback HTTP server + HTML page template
+  frontend/   Preact UI: diff rendering, comment forms, verdict buttons, filters
+  toon/       Comment type + TOON encode/decode/validation
+scripts/      SKILL.md generator
+test/         Mirrors src/, one test dir per module
+```
+
+See [`docs/DESIGN.md`](docs/DESIGN.md) for the original design rationale —
+why an async, no-long-poll flow was chosen, the AXI (Agent eXperience
+Interface) philosophy this follows, and the security constraints that shaped
+the server design.
+
+## License
+
+MIT
