@@ -1,0 +1,32 @@
+{
+  "name": "diff-review-axi",
+  "version": "0.1.0",
+  "description": "Review uncommitted git diffs in a browser and hand structured comments back to an AI agent.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "diff-review": "./bin/diff-review.js"
+  },
+  "files": [
+    "bin",
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "skill:generate": "node scripts/generate-skill.mjs",
+    "skill:check": "node scripts/generate-skill.mjs --check"
+  },
+  "dependencies": {
+    "axi-sdk-js": "^0.1.8",
+    "@toon-format/toon": "^2.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
