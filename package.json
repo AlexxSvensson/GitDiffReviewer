@@ -12,7 +12,8 @@
   },
   "files": [
     "bin",
-    "dist"
+    "dist",
+    ".claude/skills"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.frontend.json --noEmit && node esbuild.frontend.mjs",
