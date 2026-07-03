@@ -6,9 +6,10 @@ import {
   createCommentsState,
   createFileCommentButton,
   createGlobalCommentButton,
+  createVerdictButtons,
 } from "./comments-ui.js";
 import { createContextToggle } from "./context-levels.js";
-import { applyPathFilter } from "./filters.js";
+import { applyFilters, type VerdictFilter } from "./filters.js";
 import { saveComments, showSavedMessage } from "./save-client.js";
 
 declare global {
@@ -22,7 +23,7 @@ function fileLabel(file: FilePayload): string {
   return file.oldPath ? `${prefix}${file.oldPath} → ${file.path}` : `${prefix}${file.path}`;
 }
 
-function buildFileSection(file: FilePayload, commentsState: CommentsState): HTMLElement {
+function buildFileSection(file: FilePayload, commentsState: CommentsState, onVerdictChange: () => void): HTMLElement {
   const section = document.createElement("section");
   section.className = "review-file";
   section.dataset.file = file.path;
@@ -38,7 +39,12 @@ function buildFileSection(file: FilePayload, commentsState: CommentsState): HTML
   const toggle = document.createElement("button");
   toggle.type = "button";
 
-  toolbar.append(label, createFileCommentButton(file.path, commentsState), toggle);
+  const verdictButtons = createVerdictButtons(file.path, commentsState, (verdict) => {
+    section.dataset.verdict = verdict ?? "";
+    onVerdictChange();
+  });
+
+  toolbar.append(label, createFileCommentButton(file.path, commentsState), verdictButtons, toggle);
 
   const diffContainer = document.createElement("div");
   diffContainer.className = "review-file-diff";
@@ -69,6 +75,21 @@ function renderApp(payload: ReviewPayload): void {
   filterInput.placeholder = "Filter by path…";
   filterInput.className = "review-path-filter";
 
+  const verdictSelect = document.createElement("select");
+  verdictSelect.className = "review-verdict-filter";
+  const verdictOptions: Array<[VerdictFilter, string]> = [
+    ["all", "All files"],
+    ["good", "👍 Looks good"],
+    ["bad", "👎 Looks bad"],
+    ["none", "No verdict yet"],
+  ];
+  for (const [value, text] of verdictOptions) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = text;
+    verdictSelect.append(option);
+  }
+
   const doneButton = document.createElement("button");
   doneButton.type = "button";
   doneButton.className = "review-done-button";
@@ -77,10 +98,14 @@ function renderApp(payload: ReviewPayload): void {
     void handleReviewDone(doneButton, commentsState.getAll());
   });
 
-  toolbar.append(filterInput, createGlobalCommentButton(commentsState), pendingCount, doneButton);
+  toolbar.append(filterInput, verdictSelect, createGlobalCommentButton(commentsState), pendingCount, doneButton);
 
   const fileList = document.createElement("div");
   fileList.className = "review-file-list";
+
+  function recomputeFilters(): void {
+    applyFilters(fileList, filterInput.value, verdictSelect.value as VerdictFilter);
+  }
 
   if (payload.files.length === 0) {
     const empty = document.createElement("p");
@@ -88,11 +113,12 @@ function renderApp(payload: ReviewPayload): void {
     fileList.append(empty);
   } else {
     for (const file of payload.files) {
-      fileList.append(buildFileSection(file, commentsState));
+      fileList.append(buildFileSection(file, commentsState, recomputeFilters));
     }
   }
 
-  filterInput.addEventListener("input", () => applyPathFilter(fileList, filterInput.value));
+  filterInput.addEventListener("input", recomputeFilters);
+  verdictSelect.addEventListener("change", recomputeFilters);
 
   app.append(toolbar, fileList);
 }

@@ -1,19 +1,56 @@
 import type { Comment, CommentScope } from "../toon/comments.js";
 
+export type Verdict = "good" | "bad" | null;
+
+const VERDICT_BODY: Record<Exclude<Verdict, null>, string> = {
+  good: "Looks good",
+  bad: "Looks bad",
+};
+
 export interface CommentsState {
   add(comment: Comment): void;
+  /** All typed comments plus one materialized file-scope comment per active verdict. */
   getAll(): Comment[];
+  setVerdict(file: string, verdict: Verdict): void;
+  getVerdict(file: string): Verdict;
 }
 
 export function createCommentsState(onChange: (comments: Comment[]) => void): CommentsState {
   const comments: Comment[] = [];
+  const verdicts = new Map<string, Exclude<Verdict, null>>();
+
+  function materialize(): Comment[] {
+    const verdictComments: Comment[] = [...verdicts.entries()].map(([file, verdict]) => ({
+      scope: "file",
+      file,
+      line: "",
+      body: VERDICT_BODY[verdict],
+    }));
+    return [...comments, ...verdictComments];
+  }
+
+  function notify(): void {
+    onChange(materialize());
+  }
+
   return {
     add(comment) {
       comments.push(comment);
-      onChange([...comments]);
+      notify();
     },
     getAll() {
-      return [...comments];
+      return materialize();
+    },
+    setVerdict(file, verdict) {
+      if (verdict === null) {
+        verdicts.delete(file);
+      } else {
+        verdicts.set(file, verdict);
+      }
+      notify();
+    },
+    getVerdict(file) {
+      return verdicts.get(file) ?? null;
     },
   };
 }
@@ -97,4 +134,48 @@ export function createGlobalCommentButton(state: CommentsState): HTMLButtonEleme
   button.textContent = "Comment on entire review";
   button.addEventListener("click", () => openCommentForm(button, { scope: "global", file: "", line: "" }, state));
   return button;
+}
+
+/**
+ * Toggleable per-file verdict: clicking an already-active button clears it
+ * back to no verdict, clicking the other one switches. `onChange` fires with
+ * the new verdict so the caller can update filterable DOM state (data-verdict).
+ */
+export function createVerdictButtons(
+  file: string,
+  state: CommentsState,
+  onChange: (verdict: Verdict) => void,
+): HTMLElement {
+  const wrapper = document.createElement("div");
+  wrapper.className = "verdict-buttons";
+
+  const goodButton = document.createElement("button");
+  goodButton.type = "button";
+  goodButton.className = "verdict-button verdict-good";
+  goodButton.textContent = "👍 Looks good";
+
+  const badButton = document.createElement("button");
+  badButton.type = "button";
+  badButton.className = "verdict-button verdict-bad";
+  badButton.textContent = "👎 Looks bad";
+
+  function refresh(): void {
+    const current = state.getVerdict(file);
+    goodButton.classList.toggle("active", current === "good");
+    badButton.classList.toggle("active", current === "bad");
+  }
+
+  function toggle(verdict: Exclude<Verdict, null>): void {
+    const next: Verdict = state.getVerdict(file) === verdict ? null : verdict;
+    state.setVerdict(file, next);
+    refresh();
+    onChange(next);
+  }
+
+  goodButton.addEventListener("click", () => toggle("good"));
+  badButton.addEventListener("click", () => toggle("bad"));
+
+  refresh();
+  wrapper.append(goodButton, badButton);
+  return wrapper;
 }
