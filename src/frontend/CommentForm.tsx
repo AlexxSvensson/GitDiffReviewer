@@ -6,29 +6,30 @@ import { type CommentTarget, placeholderFor } from "./types.js";
 export interface CommentFormProps {
   target: CommentTarget;
   anchorRect: DOMRect;
-  /** Already-existing comments for this exact target, shown above the add-new input. */
+  /** Already-existing comments for this exact target — at most one typed comment, plus a verdict for file targets. */
   existingEntries: CommentEntry[];
   onSubmit: (comment: Comment) => void;
+  onReplaceTyped: (index: number, comment: Comment) => void;
   onRemoveTyped: (index: number) => void;
   onRemoveVerdict: (file: string) => void;
   onCancel: () => void;
 }
 
-function entryKey(entry: CommentEntry): string {
-  return entry.kind === "typed" ? `typed-${entry.index}` : `verdict-${entry.file}`;
-}
-
-/** Fixed-position popover anchored near whatever was clicked to open it. */
+/** Fixed-position popover anchored near whatever was clicked to open it. One comment per target: editable in place, not appended alongside. */
 export function CommentForm({
   target,
   anchorRect,
   existingEntries,
   onSubmit,
+  onReplaceTyped,
   onRemoveTyped,
   onRemoveVerdict,
   onCancel,
 }: CommentFormProps) {
-  const [body, setBody] = useState("");
+  const typedEntry = existingEntries.find((entry) => entry.kind === "typed");
+  const verdictEntry = existingEntries.find((entry) => entry.kind === "verdict");
+
+  const [body, setBody] = useState(typedEntry?.comment.body ?? "");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -38,7 +39,18 @@ export function CommentForm({
   function submit(): void {
     const trimmed = body.trim();
     if (!trimmed) return;
-    onSubmit({ scope: target.scope, file: target.file, line: target.line, body: trimmed });
+    const comment: Comment = { scope: target.scope, file: target.file, line: target.line, body: trimmed };
+    if (typedEntry?.kind === "typed") {
+      onReplaceTyped(typedEntry.index, comment);
+    } else {
+      onSubmit(comment);
+    }
+    onCancel();
+  }
+
+  function deleteComment(): void {
+    if (typedEntry?.kind === "typed") onRemoveTyped(typedEntry.index);
+    onCancel();
   }
 
   return (
@@ -46,20 +58,19 @@ export function CommentForm({
       class="comment-form"
       style={{ left: `${Math.max(8, anchorRect.left)}px`, top: `${anchorRect.bottom + window.scrollY + 4}px` }}
     >
-      {existingEntries.length > 0 && (
+      {verdictEntry?.kind === "verdict" && (
         <div class="comment-form-existing">
-          {existingEntries.map((entry) => (
-            <div class="comment-form-existing-item" key={entryKey(entry)}>
-              <p>{entry.comment.body}</p>
-              <button
-                type="button"
-                aria-label="Remove this comment"
-                onClick={() => (entry.kind === "typed" ? onRemoveTyped(entry.index) : onRemoveVerdict(entry.file))}
-              >
-                ×
-              </button>
-            </div>
-          ))}
+          <p class="comment-form-existing-label">Verdict</p>
+          <div class="comment-form-existing-item">
+            <p class="comment-form-existing-body">{verdictEntry.comment.body}</p>
+            <button
+              type="button"
+              class="comment-form-existing-remove"
+              onClick={() => onRemoveVerdict(verdictEntry.file)}
+            >
+              Remove
+            </button>
+          </div>
         </div>
       )}
       <textarea
@@ -72,8 +83,13 @@ export function CommentForm({
       />
       <div class="comment-form-actions">
         <button type="button" onClick={submit}>
-          Add comment
+          {typedEntry ? "Update comment" : "Add comment"}
         </button>
+        {typedEntry && (
+          <button type="button" class="comment-form-delete" onClick={deleteComment}>
+            Delete
+          </button>
+        )}
         <button type="button" class="comment-form-cancel" onClick={onCancel}>
           Cancel
         </button>

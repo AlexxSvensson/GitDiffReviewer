@@ -254,37 +254,49 @@ tr.has-comment .d2h-code-side-linenumber::after {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  padding-bottom: 0.5rem;
+  padding-bottom: 0.75rem;
   border-bottom: 1px solid #d0d7de;
+}
+
+.comment-form-existing-label {
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: #57606a;
 }
 
 .comment-form-existing-item {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.5rem;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.5rem 0.6rem;
+  background: #f6f8fa;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
 }
 
-.comment-form-existing-item p {
+.comment-form-existing-body {
   margin: 0;
   font-size: 0.9rem;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-.comment-form-existing-item button {
-  flex-shrink: 0;
+.comment-form-existing-remove {
+  align-self: flex-end;
   border: none;
   background: none;
   cursor: pointer;
-  font-size: 1.1rem;
-  line-height: 1;
-  color: #57606a;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #cf222e;
   padding: 0.1rem 0.3rem;
 }
 
-.comment-form-existing-item button:hover {
-  color: #cf222e;
+.comment-form-existing-remove:hover {
+  text-decoration: underline;
 }
 
 .comment-form-input {
@@ -301,6 +313,11 @@ tr.has-comment .d2h-code-side-linenumber::after {
   display: flex;
   gap: 0.5rem;
   justify-content: flex-end;
+}
+
+.comment-form-delete {
+  margin-right: auto;
+  color: #cf222e;
 }
 
 .comment-form-actions button {

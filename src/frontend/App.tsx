@@ -51,7 +51,10 @@ export function App({ payload }: { payload: ReviewPayload }) {
 
   function addComment(comment: Comment): void {
     setComments((prev) => [...prev, comment]);
-    setActiveForm(null);
+  }
+
+  function replaceComment(index: number, comment: Comment): void {
+    setComments((prev) => prev.map((existing, i) => (i === index ? comment : existing)));
   }
 
   function removeComment(index: number): void {
@@ -166,6 +169,7 @@ export function App({ payload }: { payload: ReviewPayload }) {
           anchorRect={activeForm.anchorRect}
           existingEntries={entriesForTarget(commentEntries, activeForm.target)}
           onSubmit={addComment}
+          onReplaceTyped={replaceComment}
           onRemoveTyped={removeComment}
           onRemoveVerdict={(file) => setVerdict(file, null)}
           onCancel={() => setActiveForm(null)}
