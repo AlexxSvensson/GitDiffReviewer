@@ -19,6 +19,8 @@ export interface ReviewServerOptions {
   assetsDir: string;
   /** Called once the server has fully closed (after a save or an idle timeout). */
   onClose?: () => void;
+  /** Called once comments.toon has been written by a successful POST /save, before the server starts closing. */
+  onSaved?: () => void;
 }
 
 export interface ReviewServerHandle {
@@ -105,6 +107,7 @@ export async function createReviewServer(
     if (meta) {
       await writeMeta(reviewId, { ...meta, savedAt: new Date().toISOString() });
     }
+    opts.onSaved?.();
 
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ ok: true }));

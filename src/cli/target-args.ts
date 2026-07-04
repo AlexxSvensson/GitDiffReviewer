@@ -9,6 +9,8 @@ export interface ParsedTargetArgs {
   noOpen: boolean;
   /** undefined = let the OS assign an ephemeral port. */
   port: number | undefined;
+  /** Stay attached and print the saved comments as TOON instead of returning immediately. */
+  wait: boolean;
 }
 
 export function parseTargetArgs(args: string[]): ParsedTargetArgs {
@@ -17,6 +19,7 @@ export function parseTargetArgs(args: string[]): ParsedTargetArgs {
   let staged = false;
   let noOpen = false;
   let port: number | undefined;
+  let wait = false;
 
   for (let i = 1; i < args.length; i++) {
     const arg = args[i];
@@ -24,6 +27,8 @@ export function parseTargetArgs(args: string[]): ParsedTargetArgs {
       staged = true;
     } else if (arg === "--no-open") {
       noOpen = true;
+    } else if (arg === "--wait") {
+      wait = true;
     } else if (arg === "--base") {
       i += 1;
       const value = args[i];
@@ -44,10 +49,10 @@ export function parseTargetArgs(args: string[]): ParsedTargetArgs {
       port = parsed;
     } else {
       throw new AxiError(`Unknown flag: ${arg}`, "VALIDATION_ERROR", [
-        "Supported flags: --staged, --base <ref>, --no-open, --port <n>",
+        "Supported flags: --staged, --base <ref>, --no-open, --port <n>, --wait",
       ]);
     }
   }
 
-  return { target, base, staged, baseKey: staged ? "staged" : base, noOpen, port };
+  return { target, base, staged, baseKey: staged ? "staged" : base, noOpen, port, wait };
 }

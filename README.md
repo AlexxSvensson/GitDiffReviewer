@@ -16,19 +16,26 @@ those comments back to the agent as structured data it can act on.
 
 ## How it works
 
-1. The agent runs `diff-review <target>`. This starts a short-lived local
-   server on `127.0.0.1` and opens your browser — the agent does **not**
-   wait around for you to finish.
+1. The agent runs `diff-review <target> --wait` as a backgrounded command.
+   This starts a short-lived local server on `127.0.0.1` and opens your
+   browser — the agent isn't frozen while you review, it just gets notified
+   automatically the moment you're done.
 2. You review on your own time: expand context, filter files, mark files
    👍/👎, leave comments on a line, a file, or the review as a whole.
-3. Click **Review done**. The server writes your comments to disk and shuts
-   itself down.
-4. Next time the agent runs `diff-review comments <target>`, it reads your
-   comments back as [TOON](https://github.com/toon-format/spec) (a compact,
-   token-efficient alternative to JSON).
+3. Click **Review done**. The server writes your comments to disk, prints
+   them as [TOON](https://github.com/toon-format/spec) (a compact,
+   token-efficient alternative to JSON) back to the waiting command, and
+   shuts itself down.
 
-There's no long-lived server, no polling, no login — just a local review
-loop that gets out of the way when it's not needed.
+You never have to tell the agent you're finished — clicking the button is
+the only signal it needs. There's no long-lived server, no polling, no
+login — just a local review loop that gets out of the way when it's not
+needed.
+
+If the agent's environment can't background commands, it can fall back to
+the plain form instead: `diff-review <target>` returns immediately with a
+URL, and once you say you're done, it runs `diff-review comments <target>`
+to read your comments back.
 
 ## Install
 
@@ -45,6 +52,15 @@ npm link
 This puts a `diff-review` binary on your PATH.
 
 ## Quick start
+
+```bash
+# Open a review of everything uncommitted in the current repo, and wait for it —
+# run this backgrounded so it doesn't block; you'll get the comments the moment
+# "Review done" is clicked
+diff-review . --wait
+```
+
+Or, without waiting:
 
 ```bash
 # Open a review of everything uncommitted in the current repo
@@ -119,6 +135,7 @@ changes, not just that subdirectory.
 | `--base <ref>`   | Diff against `<ref>` instead of `HEAD`.                                |
 | `--no-open`      | Start the server but don't open a browser automatically.              |
 | `--port <n>`     | Use a specific port instead of an OS-assigned one.                     |
+| `--wait`         | Block until "Review done" is clicked, then print the comments as TOON directly instead of returning immediately. |
 
 ## Using it as a Claude Code skill
 

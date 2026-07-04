@@ -48,11 +48,14 @@ async function main(): Promise<void> {
   const handle = await createReviewServer(payload, args.reviewId, {
     port: args.port,
     assetsDir: FRONTEND_DIST_DIR,
+    onSaved: () => process.stdout.write("SAVED\n"),
     onClose: () => process.exit(0),
   });
 
-  // Handshake line the parent CLI process reads to learn the URL, then it
-  // stops listening and exits — this process keeps running as the server.
+  // Handshake lines the parent CLI process reads: "LISTENING <url>" once the
+  // server is up (after which it normally stops listening and exits — this
+  // process keeps running as the server), and "SAVED" once a review has been
+  // submitted, which a `--wait` invocation stays attached to hear.
   process.stdout.write(`LISTENING ${handle.url}\n`);
 }
 

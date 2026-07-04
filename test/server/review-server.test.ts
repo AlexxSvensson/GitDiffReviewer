@@ -101,6 +101,44 @@ describe("createReviewServer", () => {
     await expect(fetch(handle.url)).rejects.toThrow();
   });
 
+  it("calls onSaved once comments.toon is written, before the server closes", async () => {
+    let savedCalledAt: number | undefined;
+    let closedCalledAt: number | undefined;
+    handle = await createReviewServer(samplePayload, "test-review", {
+      assetsDir,
+      onSaved: () => {
+        savedCalledAt = Date.now();
+      },
+      onClose: () => {
+        closedCalledAt = Date.now();
+      },
+    });
+
+    await fetch(new URL("/save", handle.url), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ comments: [{ scope: "global", body: "looks good" }] }),
+    });
+
+    await sleep(50);
+    expect(savedCalledAt).toBeDefined();
+    expect(closedCalledAt).toBeDefined();
+    expect(savedCalledAt!).toBeLessThanOrEqual(closedCalledAt!);
+  });
+
+  it("does not call onSaved when the server closes via idle timeout", async () => {
+    let savedCalled = false;
+    handle = await createReviewServer(samplePayload, "test-review", {
+      assetsDir,
+      idleTimeoutMs: 30,
+      onSaved: () => {
+        savedCalled = true;
+      },
+    });
+    await sleep(100);
+    expect(savedCalled).toBe(false);
+  });
+
   it("rejects a malformed save body without crashing the server", async () => {
     handle = await createReviewServer(samplePayload, "test-review", { assetsDir });
 
