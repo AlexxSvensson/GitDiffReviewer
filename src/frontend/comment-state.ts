@@ -1,4 +1,5 @@
 import type { Comment } from "../toon/comments.js";
+import type { CommentTarget } from "./types.js";
 
 export type Verdict = "good" | "bad" | null;
 export type VerdictMap = Record<string, Exclude<Verdict, null>>;
@@ -20,4 +21,29 @@ export function materializeVerdicts(verdicts: VerdictMap): Comment[] {
 /** All typed comments plus one materialized file-scope comment per active verdict. */
 export function combineComments(typed: Comment[], verdicts: VerdictMap): Comment[] {
   return [...typed, ...materializeVerdicts(verdicts)];
+}
+
+/** A single entry for a "review your comments so far" list, tagged with how to remove it. */
+export type CommentEntry =
+  | { kind: "typed"; index: number; comment: Comment }
+  | { kind: "verdict"; file: string; comment: Comment };
+
+export function buildCommentEntries(typed: Comment[], verdicts: VerdictMap): CommentEntry[] {
+  const typedEntries: CommentEntry[] = typed.map((comment, index) => ({ kind: "typed", index, comment }));
+  const verdictEntries: CommentEntry[] = materializeVerdicts(verdicts).map((comment) => ({
+    kind: "verdict",
+    file: comment.file,
+    comment,
+  }));
+  return [...typedEntries, ...verdictEntries];
+}
+
+/** Entries that already apply to exactly this target — shown inline so an existing comment is visible where it lives. */
+export function entriesForTarget(entries: CommentEntry[], target: CommentTarget): CommentEntry[] {
+  return entries.filter(({ comment }) => {
+    if (comment.scope !== target.scope) return false;
+    if (target.scope === "change") return comment.file === target.file && comment.line === target.line;
+    if (target.scope === "file") return comment.file === target.file;
+    return true; // global: scope match is the whole target
+  });
 }

@@ -1,8 +1,15 @@
 import { useMemo, useState } from "preact/hooks";
 import type { ReviewPayload } from "../review/types.js";
 import type { Comment } from "../toon/comments.js";
-import { combineComments, type Verdict, type VerdictMap } from "./comment-state.js";
+import {
+  buildCommentEntries,
+  combineComments,
+  entriesForTarget,
+  type Verdict,
+  type VerdictMap,
+} from "./comment-state.js";
 import { CommentForm } from "./CommentForm.js";
+import { CommentsPanel } from "./CommentsPanel.js";
 import { FileSection } from "./FileSection.js";
 import { matchesFilters, type VerdictFilter } from "./filters.js";
 import { saveComments } from "./save-client.js";
@@ -29,8 +36,14 @@ export function App({ payload }: { payload: ReviewPayload }) {
   const [verdictFilter, setVerdictFilter] = useState<VerdictFilter>("all");
   const [activeForm, setActiveForm] = useState<ActiveForm | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [showComments, setShowComments] = useState(false);
 
   const allComments = useMemo(() => combineComments(comments, verdicts), [comments, verdicts]);
+  const commentEntries = useMemo(() => buildCommentEntries(comments, verdicts), [comments, verdicts]);
+  const globalCommentCount = useMemo(
+    () => commentEntries.filter((entry) => entry.comment.scope === "global").length,
+    [commentEntries],
+  );
 
   function openForm(target: CommentTarget, anchorRect: DOMRect): void {
     setActiveForm({ target, anchorRect });
@@ -38,7 +51,14 @@ export function App({ payload }: { payload: ReviewPayload }) {
 
   function addComment(comment: Comment): void {
     setComments((prev) => [...prev, comment]);
-    setActiveForm(null);
+  }
+
+  function replaceComment(index: number, comment: Comment): void {
+    setComments((prev) => prev.map((existing, i) => (i === index ? comment : existing)));
+  }
+
+  function removeComment(index: number): void {
+    setComments((prev) => prev.filter((_, i) => i !== index));
   }
 
   function setVerdict(file: string, verdict: Verdict): void {
@@ -93,10 +113,17 @@ export function App({ payload }: { payload: ReviewPayload }) {
           }
         >
           Comment on entire review
+          {globalCommentCount > 0 && <span class="comment-badge">{globalCommentCount}</span>}
         </button>
-        <span class="review-pending-count">
+        <button
+          type="button"
+          class="review-pending-count"
+          aria-expanded={showComments}
+          onClick={() => setShowComments((current) => !current)}
+        >
           {allComments.length === 1 ? "1 comment" : `${allComments.length} comments`}
-        </span>
+          {showComments ? " ▲" : " ▼"}
+        </button>
         <button
           type="button"
           class="review-done-button"
@@ -106,6 +133,14 @@ export function App({ payload }: { payload: ReviewPayload }) {
           {saveState === "saving" ? "Saving…" : "Review done"}
         </button>
       </div>
+
+      {showComments && (
+        <CommentsPanel
+          entries={commentEntries}
+          onRemoveTyped={removeComment}
+          onRemoveVerdict={(file) => setVerdict(file, null)}
+        />
+      )}
 
       <div class="review-file-list">
         {payload.files.length === 0 ? (
@@ -119,6 +154,7 @@ export function App({ payload }: { payload: ReviewPayload }) {
                 file={file}
                 hidden={!matchesFilters(file, verdict, pathFilter, verdictFilter)}
                 verdict={verdict}
+                commentEntries={commentEntries}
                 onSetVerdict={setVerdict}
                 onOpenForm={openForm}
               />
@@ -131,7 +167,11 @@ export function App({ payload }: { payload: ReviewPayload }) {
         <CommentForm
           target={activeForm.target}
           anchorRect={activeForm.anchorRect}
+          existingEntries={entriesForTarget(commentEntries, activeForm.target)}
           onSubmit={addComment}
+          onReplaceTyped={replaceComment}
+          onRemoveTyped={removeComment}
+          onRemoveVerdict={(file) => setVerdict(file, null)}
           onCancel={() => setActiveForm(null)}
         />
       )}
