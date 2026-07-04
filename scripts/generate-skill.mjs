@@ -49,15 +49,17 @@ This puts a \`diff-review\` binary on your PATH.
 
 ## Workflow
 
-1. Run \`diff-review <target>\` (target defaults to \`.\`) to open a review.
-   This starts a short-lived local server and opens a browser; it does not
-   block, so continue with other work while the human reviews.
-2. Once the human clicks "Review done" in the browser, run
-   \`diff-review comments <target>\` to read back their comments.
+Run \`diff-review <target> --wait\` (target defaults to \`.\`) as a backgrounded
+command. It opens a browser for the human to review in, stays attached, and
+prints their comments as TOON the moment they click "Review done" — you'll
+be notified automatically when that background command finishes, so there's
+no need to ask the human to tell you when they're done, and no need to poll.
 
-Alternatively, run \`diff-review <target> --wait\` as a backgrounded command:
-it stays attached and prints the comments as TOON the moment "Review done"
-is clicked, skipping the separate \`comments\` call.
+If you can't run backgrounded commands in your environment, fall back to the
+two-step form instead: run \`diff-review <target>\` (returns immediately,
+opens a browser, does not block) and continue with other work; once the
+human says they're done, run \`diff-review comments <target>\` to read back
+their comments.
 
 ## Commands
 
