@@ -38,7 +38,6 @@ body {
 .review-pending-count {
   font-size: 0.85rem;
   color: #57606a;
-  white-space: nowrap;
 }
 
 .review-path-filter {
@@ -58,6 +57,92 @@ body {
   font-size: 0.9rem;
   background: #fff;
   cursor: pointer;
+}
+
+.comments-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: #fff;
+  border-bottom: 1px solid #d0d7de;
+}
+
+.comments-panel-empty {
+  margin: 0;
+  color: #57606a;
+  font-size: 0.9rem;
+}
+
+.comments-panel-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: 0.25rem 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+}
+
+.comments-panel-item-meta {
+  grid-column: 1 / span 2;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+}
+
+.comments-panel-item-scope {
+  padding: 0.05rem 0.4rem;
+  border-radius: 4px;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  font-weight: 600;
+  background: #eaeef2;
+  color: #57606a;
+}
+
+.comments-panel-item-scope-change {
+  background: #ddf4ff;
+  color: #0969da;
+}
+
+.comments-panel-item-scope-file {
+  background: #fff8c5;
+  color: #9a6700;
+}
+
+.comments-panel-item-scope-global {
+  background: #dafbe1;
+  color: #1a7f37;
+}
+
+.comments-panel-item-target {
+  color: #57606a;
+}
+
+.comments-panel-item-body {
+  grid-column: 1 / span 2;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.comments-panel-item-remove {
+  grid-row: 1;
+  grid-column: 3;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: #57606a;
+  padding: 0.1rem 0.3rem;
+}
+
+.comments-panel-item-remove:hover {
+  color: #cf222e;
 }
 
 .review-file-list {
