@@ -1,7 +1,13 @@
 import { useMemo, useState } from "preact/hooks";
 import type { ReviewPayload } from "../review/types.js";
 import type { Comment } from "../toon/comments.js";
-import { buildCommentEntries, combineComments, type Verdict, type VerdictMap } from "./comment-state.js";
+import {
+  buildCommentEntries,
+  combineComments,
+  entriesForTarget,
+  type Verdict,
+  type VerdictMap,
+} from "./comment-state.js";
 import { CommentForm } from "./CommentForm.js";
 import { CommentsPanel } from "./CommentsPanel.js";
 import { FileSection } from "./FileSection.js";
@@ -34,6 +40,10 @@ export function App({ payload }: { payload: ReviewPayload }) {
 
   const allComments = useMemo(() => combineComments(comments, verdicts), [comments, verdicts]);
   const commentEntries = useMemo(() => buildCommentEntries(comments, verdicts), [comments, verdicts]);
+  const globalCommentCount = useMemo(
+    () => commentEntries.filter((entry) => entry.comment.scope === "global").length,
+    [commentEntries],
+  );
 
   function openForm(target: CommentTarget, anchorRect: DOMRect): void {
     setActiveForm({ target, anchorRect });
@@ -100,6 +110,7 @@ export function App({ payload }: { payload: ReviewPayload }) {
           }
         >
           Comment on entire review
+          {globalCommentCount > 0 && <span class="comment-badge">{globalCommentCount}</span>}
         </button>
         <button
           type="button"
@@ -140,6 +151,7 @@ export function App({ payload }: { payload: ReviewPayload }) {
                 file={file}
                 hidden={!matchesFilters(file, verdict, pathFilter, verdictFilter)}
                 verdict={verdict}
+                commentEntries={commentEntries}
                 onSetVerdict={setVerdict}
                 onOpenForm={openForm}
               />
@@ -152,7 +164,10 @@ export function App({ payload }: { payload: ReviewPayload }) {
         <CommentForm
           target={activeForm.target}
           anchorRect={activeForm.anchorRect}
+          existingEntries={entriesForTarget(commentEntries, activeForm.target)}
           onSubmit={addComment}
+          onRemoveTyped={removeComment}
+          onRemoveVerdict={(file) => setVerdict(file, null)}
           onCancel={() => setActiveForm(null)}
         />
       )}

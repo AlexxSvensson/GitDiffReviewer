@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildCommentEntries, combineComments, materializeVerdicts } from "../../src/frontend/comment-state.js";
+import {
+  buildCommentEntries,
+  combineComments,
+  entriesForTarget,
+  materializeVerdicts,
+} from "../../src/frontend/comment-state.js";
 
 describe("materializeVerdicts", () => {
   it("returns an empty array with no verdicts", () => {
@@ -61,5 +66,38 @@ describe("buildCommentEntries", () => {
     expect(entries).toHaveLength(2);
     expect(entries.filter((e) => e.kind === "typed")).toHaveLength(1);
     expect(entries.filter((e) => e.kind === "verdict")).toHaveLength(1);
+  });
+});
+
+describe("entriesForTarget", () => {
+  const entries = buildCommentEntries(
+    [
+      { scope: "change", file: "src/a.ts", line: "10", body: "off by one" },
+      { scope: "change", file: "src/a.ts", line: "20", body: "unrelated line" },
+      { scope: "file", file: "src/b.ts", line: "", body: "needs a refactor" },
+      { scope: "global", file: "", line: "", body: "overall fine" },
+    ],
+    { "src/a.ts": "bad" },
+  );
+
+  it("matches a change target by exact file+line", () => {
+    const result = entriesForTarget(entries, { scope: "change", file: "src/a.ts", line: "10" });
+    expect(result).toEqual([{ kind: "typed", index: 0, comment: entries[0].comment }]);
+  });
+
+  it("returns nothing for a change target with no matching comment", () => {
+    expect(entriesForTarget(entries, { scope: "change", file: "src/a.ts", line: "999" })).toEqual([]);
+  });
+
+  it("matches a file target by file, including a verdict on that file", () => {
+    const result = entriesForTarget(entries, { scope: "file", file: "src/a.ts", line: "" });
+    expect(result).toEqual([
+      { kind: "verdict", file: "src/a.ts", comment: { scope: "file", file: "src/a.ts", line: "", body: "Looks bad" } },
+    ]);
+  });
+
+  it("matches all global entries regardless of file/line", () => {
+    const result = entriesForTarget(entries, { scope: "global", file: "", line: "" });
+    expect(result).toEqual([{ kind: "typed", index: 3, comment: entries[3].comment }]);
   });
 });

@@ -1,4 +1,5 @@
 import type { Comment } from "../toon/comments.js";
+import type { CommentTarget } from "./types.js";
 
 export type Verdict = "good" | "bad" | null;
 export type VerdictMap = Record<string, Exclude<Verdict, null>>;
@@ -35,4 +36,14 @@ export function buildCommentEntries(typed: Comment[], verdicts: VerdictMap): Com
     comment,
   }));
   return [...typedEntries, ...verdictEntries];
+}
+
+/** Entries that already apply to exactly this target — shown inline so an existing comment is visible where it lives. */
+export function entriesForTarget(entries: CommentEntry[], target: CommentTarget): CommentEntry[] {
+  return entries.filter(({ comment }) => {
+    if (comment.scope !== target.scope) return false;
+    if (target.scope === "change") return comment.file === target.file && comment.line === target.line;
+    if (target.scope === "file") return comment.file === target.file;
+    return true; // global: scope match is the whole target
+  });
 }
