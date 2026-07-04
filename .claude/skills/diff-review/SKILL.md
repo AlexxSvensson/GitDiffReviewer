@@ -30,6 +30,10 @@ This puts a `diff-review` binary on your PATH.
 2. Once the human clicks "Review done" in the browser, run
    `diff-review comments <target>` to read back their comments.
 
+Alternatively, run `diff-review <target> --wait` as a backgrounded command:
+it stays attached and prints the comments as TOON the moment "Review done"
+is clicked, skipping the separate `comments` call.
+
 ## Commands
 
 - `diff-review <target>` — Render uncommitted diffs and open the review UI

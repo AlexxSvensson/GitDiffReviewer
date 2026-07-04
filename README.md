@@ -30,6 +30,13 @@ those comments back to the agent as structured data it can act on.
 There's no long-lived server, no polling, no login — just a local review
 loop that gets out of the way when it's not needed.
 
+Prefer the agent to pick your feedback up the moment you're done instead of
+checking back later? Run `diff-review <target> --wait` instead of the plain
+form — it stays attached and prints your comments as TOON as soon as you
+click **Review done**, so the agent (typically running it as a backgrounded
+command) gets the review the instant it's ready, with no separate
+`diff-review comments <target>` call needed.
+
 ## Install
 
 Not published to npm yet, so `npx` won't work. Clone and link it locally:
@@ -119,6 +126,7 @@ changes, not just that subdirectory.
 | `--base <ref>`   | Diff against `<ref>` instead of `HEAD`.                                |
 | `--no-open`      | Start the server but don't open a browser automatically.              |
 | `--port <n>`     | Use a specific port instead of an OS-assigned one.                     |
+| `--wait`         | Block until "Review done" is clicked, then print the comments as TOON directly instead of returning immediately. |
 
 ## Using it as a Claude Code skill
 
