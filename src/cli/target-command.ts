@@ -23,6 +23,7 @@ function spawnDetachedServer(args: string[]): Promise<string> {
     const child = spawn(process.execPath, [SERVER_ENTRY, ...args], {
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
     });
 
     let stdoutBuf = "";
@@ -71,7 +72,7 @@ function openBrowser(url: string): void {
         ? ["cmd", ["/c", "start", "", url]]
         : ["xdg-open", [url]];
   try {
-    spawn(command, args, { detached: true, stdio: "ignore" }).unref();
+    spawn(command, args, { detached: true, stdio: "ignore", windowsHide: true }).unref();
   } catch {
     // No opener available — the caller still gets the URL in the CLI output.
   }
