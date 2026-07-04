@@ -8,7 +8,7 @@ const execFileAsync = promisify(execFile);
 const MAX_BUFFER = 1024 * 1024 * 64;
 
 async function git(repoRoot: string, args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync("git", args, { cwd: repoRoot, maxBuffer: MAX_BUFFER });
+  const { stdout } = await execFileAsync("git", args, { cwd: repoRoot, maxBuffer: MAX_BUFFER, windowsHide: true });
   return stdout;
 }
 
@@ -155,7 +155,7 @@ export async function getUntrackedFileDiff(repoRoot: string, path: string, conte
     const { stdout } = await execFileAsync(
       "git",
       ["diff", "--no-index", `-U${contextLines}`, "/dev/null", path],
-      { cwd: repoRoot, maxBuffer: MAX_BUFFER },
+      { cwd: repoRoot, maxBuffer: MAX_BUFFER, windowsHide: true },
     );
     return stdout;
   } catch (error) {
@@ -173,6 +173,7 @@ export async function isUntrackedFileBinary(repoRoot: string, path: string): Pro
     const { stdout } = await execFileAsync("git", ["diff", "--no-index", "--numstat", "/dev/null", path], {
       cwd: repoRoot,
       maxBuffer: MAX_BUFFER,
+      windowsHide: true,
     });
     return parseBinaryPaths(stdout).has(path);
   } catch (error) {
